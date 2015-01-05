@@ -114,7 +114,7 @@ sub handle_nick {
 }
 
 sub summarize {
-    my ($server, $channel, $nick, $new_nick, $type) = @_;
+    my ($server, $channel, $handler, @handler_args) = @_;
 
     my $window = $server->window_find_item($channel);
     return if (!$window);
@@ -127,10 +127,7 @@ sub summarize {
         %events = %{$summary_lines_events{$check}};
     }
 
-    if    ($type eq '__revolving_door_join') {handle_join(\%events, $nick)}
-    elsif ($type eq '__revolving_door_quit') {handle_quit(\%events, $nick)}
-    elsif ($type eq '__revolving_door_part') {handle_part(\%events, $nick)}
-    elsif ($type eq '__revolving_door_nick') {handle_nick(\%events, $nick, $new_nick)}
+    $handler->(\%events, @handler_args);
 
     print_summary_line(\%events, $window, $check);
     $summary_lines_events{$check} = \%events;
@@ -138,7 +135,7 @@ sub summarize {
 
 sub summarize_join {
     my ($server, $channel, $nick, $address, $reason) = @_;
-    &summarize($server, $channel, $nick, 0, '__revolving_door_join');
+    &summarize($server, $channel, \&handle_join, $nick);
 }
 
 sub summarize_quit {
@@ -152,14 +149,14 @@ sub summarize_quit {
         my $last = $view->get_bookmark('bottom');
         my $last_text = $last->get_text(1);
         if ($last_text =~ m/\Q$nick\E.*?has quit/) {
-            &summarize($server, $channel->{name}, $nick, 0, '__revolving_door_quit');
+            &summarize($server, $channel->{name}, \&handle_quit, $nick);
         }
     }
 }
 
 sub summarize_part {
     my ($server, $channel, $nick, $address, $reason) = @_;
-    &summarize($server, $channel, $nick, 0, '__revolving_door_part');
+    &summarize($server, $channel, \&handle_part, $nick);
 }
 
 sub summarize_nick {
@@ -168,7 +165,7 @@ sub summarize_nick {
     foreach my $channel (@channels) {
         my $channel_nick = $channel->nick_find($new_nick);
         if (defined $channel_nick) {
-            &summarize($server, $channel->{name}, $old_nick, $new_nick, '__revolving_door_nick');
+            &summarize($server, $channel->{name}, \&handle_nick, $old_nick, $new_nick);
         }
     }
 }
