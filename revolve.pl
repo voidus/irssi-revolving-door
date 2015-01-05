@@ -39,13 +39,10 @@ sub print_summary_line {
     $view->redraw();
 }
 
-sub summarize {
-    my ($server, $channel, $nick, $new_nick, $type) = @_;
+sub parse_and_remove_summary_line {
+    my ($window, $check) = @_;
 
-    my $window = $server->window_find_item($channel);
-    return if (!$window);
     my $view = $window->view();
-    my $check = $server->{tag} . ':' . $channel;
 
     $view->set_bookmark_bottom('bottom');
     my $last = $view->get_bookmark('bottom');
@@ -66,6 +63,17 @@ sub summarize {
         }
         $view->remove_line($secondlast);
     }
+    return %door;
+}
+
+sub summarize {
+    my ($server, $channel, $nick, $new_nick, $type) = @_;
+
+    my $window = $server->window_find_item($channel);
+    return if (!$window);
+    my $check = $server->{tag} . ':' . $channel;
+
+    my %door = parse_and_remove_summary_line($window, $check);
 
     if ($type eq '__revolving_door_join') { # Join
         push(@{$door{'Joins'}}, $nick);
