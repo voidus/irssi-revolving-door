@@ -117,6 +117,10 @@ sub handle_nick {
     foreach my $part (qw/Joins Parts Quits/) {
         $_ =~ s/\b\Q$nick\E\b/$new_nick/ foreach @{$door{$part}};
     }
+
+    foreach my $mode (keys %{$door{'Modes'}}) {
+        $_ =~ s/\b\Q$nick\E\b/$new_nick/ foreach @{$door{'Modes'}{$mode}};
+    }
 }
 
 sub handle_mode {
