@@ -18,6 +18,27 @@ $VERSION = "0.0.2";
 
 my %summary_lines;
 
+sub print_summary_line {
+    my ($window, $check, %door) = @_;
+    my @summarized = ();
+    foreach my $part (qw/Joins Parts Quits Nicks/) {
+        if (scalar @{$door{$part}}) {
+            push @summarized, "\%W$part:\%n " . join(', ', @{$door{$part}});
+        }
+    }
+
+    my $summary = join(' -- ', @summarized);
+    $window->print($summary, MSGLEVEL_NEVER);
+
+    # Get the line we just printed so we can log its ID.
+    my $view = $window->view();
+    $view->set_bookmark_bottom('bottom');
+    my $last = $view->get_bookmark('bottom');
+    $summary_lines{$check} = $last->{'_irssi'};
+
+    $view->redraw();
+}
+
 sub summarize {
     my ($server, $channel, $nick, $new_nick, $type) = @_;
 
@@ -78,23 +99,7 @@ sub summarize {
             $_ =~ s/\b\Q$nick\E\b/$new_nick/ foreach @{$door{$part}};
         }
     }
-
-    @summarized = ();
-    foreach my $part (qw/Joins Parts Quits Nicks/) {
-        if (scalar @{$door{$part}}) {
-            push @summarized, "\%W$part:\%n " . join(', ', @{$door{$part}});
-        }
-    }
-
-    my $summary = join(' -- ', @summarized);
-    $window->print($summary, MSGLEVEL_NEVER);
-    
-    # Get the line we just printed so we can log its ID.
-    $view->set_bookmark_bottom('bottom');
-    $last = $view->get_bookmark('bottom');
-    $summary_lines{$check} = $last->{'_irssi'};
-
-    $view->redraw();
+    print_summary_line($window, $check, %door);
 }
 
 sub summarize_join {
