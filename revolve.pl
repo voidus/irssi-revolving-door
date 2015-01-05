@@ -17,9 +17,16 @@ $VERSION = "0.0.2";
 # http://wouter.coekaerts.be/irssi/scripts/compact.pl.html
 
 my %summary_lines;
+# Holds events for summary lines. For each entry in %summary_lines, there is a corresponding entry
+# in %summary_lines_events with the following format:
+# 'Joins' => Array of Nicks
+# 'Parts' => Array of Nicks
+# 'Nicks' => Array of "$oldnick -> $newnick"
+my %summary_lines_events;
 
 sub print_summary_line {
-    my ($window, $check, %door) = @_;
+    my %door = %{shift()};
+    my ($window, $check) = @_;
     my @summarized = ();
     foreach my $part (qw/Joins Parts Quits Nicks/) {
         if (scalar @{$door{$part}}) {
@@ -39,7 +46,7 @@ sub print_summary_line {
     $view->redraw();
 }
 
-sub parse_and_remove_summary_line {
+sub remove_message_and_summary_line {
     my ($window, $check) = @_;
 
     my $view = $window->view();
@@ -52,18 +59,11 @@ sub parse_and_remove_summary_line {
     $view->remove_line($last);
 
     # If the second-to-last line is a summary line, parse it.
-    my %door = ('Joins' => [], 'Parts' => [], 'Quits' => [], 'Nicks' => []);
-    my @summarized = ();
     if ($secondlast and %summary_lines and $secondlast->{'_irssi'} == $summary_lines{$check}) {
-        my $summary = Irssi::strip_codes($secondlast->get_text(1));
-        @summarized = split(/ -- /, $summary);
-        foreach my $part (@summarized) {
-            my ($type, $nicks) = split(/: /, $part);
-            $door{$type} = [ split(/, /, $nicks) ];
-        }
         $view->remove_line($secondlast);
+    } else {
+        delete $summary_lines_events{$check};
     }
-    return %door;
 }
 
 sub handle_join {
@@ -120,14 +120,20 @@ sub summarize {
     return if (!$window);
     my $check = $server->{tag} . ':' . $channel;
 
-    my %door = parse_and_remove_summary_line($window, $check);
+    remove_message_and_summary_line($window, $check);
 
-    if    ($type eq '__revolving_door_join') {handle_join(\%door, $nick)}
-    elsif ($type eq '__revolving_door_quit') {handle_quit(\%door, $nick)}
-    elsif ($type eq '__revolving_door_part') {handle_part(\%door, $nick)}
-    elsif ($type eq '__revolving_door_nick') {handle_nick(\%door, $nick, $new_nick)}
+    my %events = ('Joins' => [], 'Parts' => [], 'Quits' => [], 'Nicks' => []);
+    if (exists $summary_lines_events{$check}) {
+        %events = %{$summary_lines_events{$check}};
+    }
 
-    print_summary_line($window, $check, %door);
+    if    ($type eq '__revolving_door_join') {handle_join(\%events, $nick)}
+    elsif ($type eq '__revolving_door_quit') {handle_quit(\%events, $nick)}
+    elsif ($type eq '__revolving_door_part') {handle_part(\%events, $nick)}
+    elsif ($type eq '__revolving_door_nick') {handle_nick(\%events, $nick, $new_nick)}
+
+    print_summary_line(\%events, $window, $check);
+    $summary_lines_events{$check} = \%events;
 }
 
 sub summarize_join {
