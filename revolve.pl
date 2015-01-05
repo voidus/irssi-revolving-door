@@ -22,6 +22,7 @@ my %summary_lines;
 # 'Joins' => Array of Nicks
 # 'Parts' => Array of Nicks
 # 'Nicks' => Array of "$oldnick -> $newnick"
+# 'Modes' => Hash of modestring => Array of nicks, where modestring is something like +v
 my %summary_lines_events;
 
 sub print_summary_line {
@@ -32,6 +33,11 @@ sub print_summary_line {
         if (scalar @{$door{$part}}) {
             push @summarized, "\%W$part:\%n " . join(', ', @{$door{$part}});
         }
+    }
+
+    if (%{$door{'Modes'}}) {
+        my @modestrings = map {$_ . ': ' . join(', ', @{$door{'Modes'}{$_}})} (keys %{$door{'Modes'}});
+        push @summarized, "\%WModes:\%n " . join(' ', @modestrings);
     }
 
     my $summary = join(' -- ', @summarized);
@@ -113,6 +119,15 @@ sub handle_nick {
     }
 }
 
+sub handle_mode {
+    my %events = %{shift()};
+    my ($mode, $nick) = @_;
+    if (not exists($events{'Modes'}{$mode})) {
+        $events{'Modes'}{$mode} = [];
+    }
+    push(@{$events{'Modes'}{$mode}}, $nick);
+}
+
 sub summarize {
     my ($server, $channel, $handler, @handler_args) = @_;
 
@@ -122,7 +137,7 @@ sub summarize {
 
     remove_message_and_summary_line($window, $check);
 
-    my %events = ('Joins' => [], 'Parts' => [], 'Quits' => [], 'Nicks' => []);
+    my %events = ('Joins' => [], 'Parts' => [], 'Quits' => [], 'Nicks' => [], 'Modes' => {});
     if (exists $summary_lines_events{$check}) {
         %events = %{$summary_lines_events{$check}};
     }
@@ -170,7 +185,14 @@ sub summarize_nick {
     }
 }
 
+sub summarize_mode {
+    my ($channel, $nick, $setby, $mode, $type) = @_;
+    if ($mode eq '+') {$mode = 'v'}
+    &summarize($channel->{server}, $channel->{name}, \&handle_mode, $type . $mode, $nick->{nick});
+}
+
 Irssi::signal_add_priority('message join', \&summarize_join, Irssi::SIGNAL_PRIORITY_LOW + 1);
 Irssi::signal_add_priority('message part', \&summarize_part, Irssi::SIGNAL_PRIORITY_LOW + 1);
 Irssi::signal_add_priority('message quit', \&summarize_quit, Irssi::SIGNAL_PRIORITY_LOW + 1);
 Irssi::signal_add_priority('message nick', \&summarize_nick, Irssi::SIGNAL_PRIORITY_LOW + 1);
+Irssi::signal_add_priority('nick mode changed', \&summarize_mode, Irssi::SIGNAL_PRIORITY_LOW + 1);
