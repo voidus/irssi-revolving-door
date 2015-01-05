@@ -66,6 +66,53 @@ sub parse_and_remove_summary_line {
     return %door;
 }
 
+sub handle_join {
+    my %door = %{shift()};
+    my ($nick) = @_;
+    push(@{$door{'Joins'}}, $nick);
+    @{$door{'Parts'}} = grep { $_ ne $nick } @{$door{'Parts'}} if (scalar @{$door{'Parts'}});
+    @{$door{'Quits'}} = grep { $_ ne $nick } @{$door{'Quits'}} if (scalar @{$door{'Quits'}});
+}
+
+sub handle_quit {
+    my %door = %{shift()};
+    my ($nick) = @_;
+    push(@{$door{'Quits'}}, $nick) if (!grep(/^\Q$nick\E$/, @{$door{'Joins'}}));
+    @{$door{'Joins'}} = grep { $_ ne $nick } @{$door{'Joins'}} if (scalar @{$door{'Joins'}});
+}
+
+sub handle_part {
+    my %door = %{shift()};
+    my ($nick) = @_;
+    push(@{$door{'Parts'}}, $nick) if (!grep(/^\Q$nick\E$/, @{$door{'Joins'}}));
+    @{$door{'Joins'}} = grep { $_ ne $nick } @{$door{'Joins'}} if (scalar @{$door{'Joins'}});
+}
+
+sub handle_nick {
+    my %door = %{shift()};
+    my ($nick, $new_nick) = @_;
+    my $nick_found = 0;
+    foreach my $known_nick (@{$door{'Nicks'}}) {
+        my ($orig_nick, $current_nick) = split(/ -> /, $known_nick);
+        if ($new_nick eq $orig_nick) { # Changed nickname back to original.
+            @{$door{'Nicks'}} = grep { $_ ne "$orig_nick -> $current_nick" } @{$door{'Nicks'}};
+            $nick_found = 1;
+            last;
+        } elsif ($current_nick eq $nick) {
+            $_ =~ s/\b\Q$current_nick\E\b/$new_nick/ foreach @{$door{'Nicks'}};
+            $nick_found = 1;
+            last;
+        }
+    }
+    if (!$nick_found) {
+        push(@{$door{'Nicks'}}, "$nick -> $new_nick");
+    }
+    # Update nicks in join/part/quit lists.
+    foreach my $part (qw/Joins Parts Quits/) {
+        $_ =~ s/\b\Q$nick\E\b/$new_nick/ foreach @{$door{$part}};
+    }
+}
+
 sub summarize {
     my ($server, $channel, $nick, $new_nick, $type) = @_;
 
@@ -75,38 +122,11 @@ sub summarize {
 
     my %door = parse_and_remove_summary_line($window, $check);
 
-    if ($type eq '__revolving_door_join') { # Join
-        push(@{$door{'Joins'}}, $nick);
-        @{$door{'Parts'}} = grep { $_ ne $nick } @{$door{'Parts'}} if (scalar @{$door{'Parts'}});
-        @{$door{'Quits'}} = grep { $_ ne $nick } @{$door{'Quits'}} if (scalar @{$door{'Quits'}});
-    } elsif ($type eq '__revolving_door_quit') { # Quit
-        push(@{$door{'Quits'}}, $nick) if (!grep(/^\Q$nick\E$/, @{$door{'Joins'}}));
-        @{$door{'Joins'}} = grep { $_ ne $nick } @{$door{'Joins'}} if (scalar @{$door{'Joins'}});
-    } elsif ($type eq '__revolving_door_part') { # Part
-        push(@{$door{'Parts'}}, $nick) if (!grep(/^\Q$nick\E$/, @{$door{'Joins'}}));;
-        @{$door{'Joins'}} = grep { $_ ne $nick } @{$door{'Joins'}} if (scalar @{$door{'Joins'}});;
-    } else { # Nick
-        my $nick_found = 0;
-        foreach my $known_nick (@{$door{'Nicks'}}) {
-            my ($orig_nick, $current_nick) = split(/ -> /, $known_nick);
-            if ($new_nick eq $orig_nick) { # Changed nickname back to original.
-                @{$door{'Nicks'}} = grep { $_ ne "$orig_nick -> $current_nick" } @{$door{'Nicks'}};
-                $nick_found = 1;
-                last;
-            } elsif ($current_nick eq $nick) {
-                $_ =~ s/\b\Q$current_nick\E\b/$new_nick/ foreach @{$door{'Nicks'}};
-                $nick_found = 1;
-                last;
-            }
-        }
-        if (!$nick_found) {
-            push(@{$door{'Nicks'}}, "$nick -> $new_nick");
-        }
-        # Update nicks in join/part/quit lists.
-        foreach my $part (qw/Joins Parts Quits/) {
-            $_ =~ s/\b\Q$nick\E\b/$new_nick/ foreach @{$door{$part}};
-        }
-    }
+    if    ($type eq '__revolving_door_join') {handle_join(\%door, $nick)}
+    elsif ($type eq '__revolving_door_quit') {handle_quit(\%door, $nick)}
+    elsif ($type eq '__revolving_door_part') {handle_part(\%door, $nick)}
+    elsif ($type eq '__revolving_door_nick') {handle_nick(\%door, $nick, $new_nick)}
+
     print_summary_line($window, $check, %door);
 }
 
